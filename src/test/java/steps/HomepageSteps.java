@@ -2,13 +2,15 @@ package steps;
 
 import com.microsoft.playwright.Page;
 import infrastructure.testContext.TestContext;
-import io.cucumber.java.PendingException;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.When;
 import lombok.RequiredArgsConstructor;
-import pageObject.components.ProductCard;
 import pageObject.pages.CatalogPage;
 import pageObject.pages.HomePage;
+
+import static infrastructure.constants.WebEnvParams.getLoginParam;
+import static infrastructure.constants.WebEnvParams.getPasswordParam;
+import static infrastructure.utilities.playwright.utilities.BrowserContextUtils.signIn;
 
 @RequiredArgsConstructor
 public class HomepageSteps {
@@ -23,14 +25,15 @@ public class HomepageSteps {
         page.navigate(path);
     }
 
-    @When("user clicks on {string} item")
-    public void userClicksOnItem(String itemName) {
-        ProductCard item = catalogPage.productCard(itemName);
-        item.getRoot().click();
+    @Given("a signed-in user on the {string} page")
+    public void aSignedInUserOnThePage(String path) {
+        signIn(page.context(), getLoginParam(), getPasswordParam());
+        page.navigate(path);
     }
 
     @When("user clicks on {string} button on the Home page")
     public void userClicksOnButtonOnTheHomePage(String buttonName) {
         homePage.getButtonByName(buttonName).click();
     }
+
 }
