@@ -1,0 +1,233 @@
+plugins {
+    id 'java'
+    id 'io.qameta.allure' version '4.0.1'
+    id("io.freefair.lombok") version "8.11"
+    id("com.gradle.cucumber.companion") version "1.3.0"
+}
+
+group = 'tst.qademo'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+ext {
+    junitVersion = "5.14.2"
+    junitPlatformVersion = "1.14.2"
+    cucumberVersion = "7.34.2"
+    playwrightVersion = "1.62.0"
+    allureVersion= "2.34.0"
+    slf4jVersion = "2.0.17"
+    log4j2Version = "2.25.0"
+    lombokVersion = "1.18.38"
+    apacheCommonsVersion = '3.18.0'
+}
+
+allure {
+    version = "3.4.1"
+    adapter {
+        allureJavaVersion = allureVersion
+        frameworks {
+            junit5 { }
+        }
+    }
+}
+
+dependencies {
+    implementation (
+            "org.junit.jupiter:junit-jupiter-api:$junitVersion",
+            "org.junit.platform:junit-platform-suite:$junitPlatformVersion",
+
+            "com.microsoft.playwright:playwright:$playwrightVersion",
+
+            "io.cucumber:cucumber-java:$cucumberVersion",
+            "io.cucumber:cucumber-junit-platform-engine:$cucumberVersion",
+            "io.cucumber:cucumber-picocontainer:$cucumberVersion",
+
+            "io.qameta.allure:allure-cucumber7-jvm:$allureVersion",
+            "io.qameta.allure:allure-junit5:$allureVersion",
+
+            "org.slf4j:slf4j-simple:$slf4jVersion",
+
+            "org.apache.logging.log4j:log4j-core:$log4j2Version",
+            "org.apache.logging.log4j:log4j-api:$log4j2Version",
+
+            "org.apache.commons:commons-lang3:$apacheCommonsVersion",
+
+            "org.projectlombok:lombok:$lombokVersion",
+    )
+
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:${junitVersion}"
+}
+
+def maxRetries = Integer.parseInt(System.getProperty('retry', '0'))
+def rerunFile = layout.buildDirectory.file("cucumber-rerun.txt").get().asFile
+
+configurations {
+    cucumberRuntime {
+        extendsFrom testImplementation
+    }
+}
+
+test {
+    systemProperties = System.properties as Map<String, ?>
+    useJUnitPlatform {
+        includeEngines 'junit-platform-suite'
+    }
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    filter {
+        includeTestsMatching 'CucumberRunner'
+    }
+
+    ignoreFailures = true
+
+    def isParallelExecution = System.getProperty("parallel.execution", "true")
+    def threads = System.getProperty('threads')
+    def video = System.getProperty('video')
+
+    systemProperties(project.gradle.startParameter.systemPropertiesArgs)
+    systemProperty 'cucumber.junit-platform.naming-strategy', 'long'
+    systemProperty 'cucumber.filter.tags', System.getProperty("cucumber.filter.tags")
+    systemProperty 'cucumber.execution.parallel.enabled', isParallelExecution
+    systemProperty 'cucumber.execution.parallel.config.strategy', 'fixed'
+    def threadCount = threads ? Integer.parseInt(threads) : (Runtime.runtime.availableProcessors().intdiv(2) ?: 1)
+    systemProperty 'cucumber.execution.parallel.config.fixed.parallelism', threadCount
+    systemProperty 'cucumber.execution.parallel.config.fixed.max-pool-size', threadCount
+    systemProperty 'video', video ? Boolean.parseBoolean(video) : false
+    doFirst {
+        println "Running with parallel.execution set to: ${isParallelExecution}"
+        println "Running with retry count: ${maxRetries}"
+        rerunFile.delete()
+    }
+
+    testLogging {
+        events "PASSED", "FAILED", "SKIPPED", "STANDARD_OUT", "STANDARD_ERROR"
+        exceptionFormat "FULL"
+        showExceptions true
+        showCauses true
+        showStackTraces true
+
+        debug {
+            events "PASSED", "FAILED", "SKIPPED", "STANDARD_OUT", "STANDARD_ERROR"
+            exceptionFormat "FULL"
+        }
+        info.events = debug.events
+        info.exceptionFormat = debug.exceptionFormat
+
+        afterSuite { desc, result ->
+            if (!desc.parent) {
+                def output = "Results: ${result.resultType} (${result.testCount} tests, ${result.successfulTestCount} passed, ${result.failedTestCount} failed, ${result.skippedTestCount} skipped)"
+                def startItem = '|  ', endItem = '  |'
+                def repeatLength = startItem.length() + output.length() + endItem.length()
+                println('\n' + ('-' * repeatLength) + '\n' + startItem + output + endItem + '\n' + ('-' * repeatLength))
+            }
+        }
+    }
+
+    testLogging.showStandardStreams = true
+}
+
+// ---------------------------------------------------------------------------
+// Retry tasks — one per retry attempt, only created when -Dretry=N (N > 0)
+// Each task:
+//   1. Checks (onlyIf) that the rerun file is non-empty — skips if all passed
+//   2. Reads the failed scenario URIs from the rerun file, clears it, passes URIs directly
+//      via jvmArgs (avoids @file expansion which is CLI-only and ignored by JUnit Platform engine)
+//   3. CucumberRetryRunner's annotation-defined rerun plugin writes this attempt's failures
+//      back to the same rerun file, ready for the next retry task
+//   4. Allure accumulates results across all runs — uniqueid config groups retries per scenario
+//
+// Note: cucumber.plugin in @ConfigurationParameter annotation takes priority over system
+// properties in JUnit Platform Suite — plugins must be defined in the runner annotations,
+// not via Gradle systemProperty.
+// ---------------------------------------------------------------------------
+if (maxRetries > 0) {
+    (1..maxRetries).each { attempt ->
+        tasks.register("retryAttempt${attempt}", Test) {
+            description = "Retry attempt ${attempt}/${maxRetries} for failed Cucumber scenarios"
+            group = 'verification'
+
+            useJUnitPlatform {
+                includeEngines 'junit-platform-suite'
+            }
+
+            testClassesDirs = sourceSets.test.output.classesDirs
+            classpath = sourceSets.test.runtimeClasspath
+
+            filter {
+                includeTestsMatching 'CucumberRetryRunner'
+            }
+
+            ignoreFailures = true
+
+            def video = System.getProperty('video')
+            def threads = System.getProperty('threads')
+            def threadCount = threads ? Integer.parseInt(threads) : (Runtime.runtime.availableProcessors().intdiv(2) ?: 1)
+
+            systemProperties(project.gradle.startParameter.systemPropertiesArgs)
+            systemProperty 'cucumber.execution.parallel.enabled', System.getProperty("parallel.execution", "true")
+            systemProperty 'cucumber.execution.parallel.config.strategy', 'fixed'
+            systemProperty 'cucumber.execution.parallel.config.fixed.parallelism', threadCount
+            systemProperty 'cucumber.execution.parallel.config.fixed.max-pool-size', threadCount
+            systemProperty 'video', video ? Boolean.parseBoolean(video) : false
+            // Skip this task entirely if there are no failures to retry
+            onlyIf {
+                rerunFile.exists() && !rerunFile.text.trim().isEmpty()
+            }
+
+            doFirst {
+                def failedScenarios = rerunFile.readLines().findAll { !it.trim().isEmpty() }
+                println "\n=== Retry ${attempt}/${maxRetries}: Re-running ${failedScenarios.size()} failed scenario(s) ==="
+                failedScenarios.each { println "  ${it}" }
+
+                // Clear the rerun file BEFORE the run so this attempt captures only its own failures.
+                // Pass URIs directly via jvmArgs — @file expansion is CLI-only and not supported
+                // by the JUnit Platform engine's cucumber.features configuration parameter.
+                rerunFile.text = ''
+                jvmArgs "-Dcucumber.features=${failedScenarios.join(',')}"
+            }
+
+            testLogging {
+                events "PASSED", "FAILED", "SKIPPED"
+                exceptionFormat "FULL"
+
+                afterSuite { desc, result ->
+                    if (!desc.parent) {
+                        def stillFailing = rerunFile.exists()
+                                ? rerunFile.readLines().findAll { !it.trim().isEmpty() }.size()
+                                : 0
+                        def status = stillFailing == 0 ? "ALL PASSED" : "${stillFailing} still failing"
+                        def output = "Retry ${attempt}/${maxRetries} results: ${result.resultType}" +
+                                " (${result.testCount} tests," +
+                                " ${result.successfulTestCount} passed," +
+                                " ${result.failedTestCount} failed," +
+                                " ${result.skippedTestCount} skipped) — ${status}"
+                        def startItem = '|  ', endItem = '  |'
+                        def repeatLength = startItem.length() + output.length() + endItem.length()
+                        println('\n' + ('=' * repeatLength) + '\n' + startItem + output + endItem + '\n' + ('=' * repeatLength))
+                    }
+                }
+            }
+        }
+    }
+
+    // Chain: test → retryAttempt1 → retryAttempt2 → ...
+    // finalizedBy ensures retries run even when the previous task has failures (ignoreFailures = true)
+    test.finalizedBy 'retryAttempt1'
+    if (maxRetries >= 2) {
+        (2..maxRetries).each { i ->
+            tasks.named("retryAttempt${i - 1}").configure {
+                finalizedBy "retryAttempt${i}"
+            }
+        }
+    }
+}
