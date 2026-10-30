@@ -1,2 +1,2 @@
 # CucumberJVM-Playwright-QaDemo
-CucumberJVM Playwright tests example
+This is GH-PAGE branch to store Allure reports and nothing more
