@@ -156,10 +156,15 @@ jobs:
 
       - name: Generate Allure report
         # Allure version must match the one in build.gradle
-        run: npx --yes allure@3.4.1 generate ./allure-results --output ./allure-report
+#        run: npx --yes allure@3.4.1 generate ./allure-results --output ./allure-report
+        if: always()
+        run: |
+          npm install -g allure
+          allure generate build/allure-results -o allure-report
 
       - name: Deploy report to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4.0.0
+        uses: peaceiris/actions-gh-pages@v4.1.0
+        if: always()
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
