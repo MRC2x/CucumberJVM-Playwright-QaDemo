@@ -41,11 +41,12 @@ public class AllureUtils {
     }
 
     /**
-     * Attaches a Playwright trace; open it with {@code npx playwright show-trace <file>} or at trace.playwright.dev
+     * Attaches a Playwright trace; Allure 3 renders this content type in its embedded trace viewer.
+     * Fallback: download the .zip and open it with {@code npx playwright show-trace <file>}
      */
     public static void allureAttachTrace(String attachmentName, InputStream is) {
         if (is != null) {
-            Allure.getLifecycle().addAttachment(attachmentName, "application/zip", ".zip", is);
+            Allure.getLifecycle().addAttachment(attachmentName, "application/vnd.allure.playwright-trace", ".zip", is);
         } else log.error("Can't attach trace file, specified input stream is null");
     }
 

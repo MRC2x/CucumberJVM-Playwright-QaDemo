@@ -1,0 +1,183 @@
+name: Web tests - Manual Execution
+run-name: "Run Web tests: ${{ inputs.TEST_TAG != '' && inputs.TEST_TAG || 'All tests' }} - ${{ inputs.BROWSER }} browser"
+
+on:
+  workflow_dispatch:
+    inputs:
+      BROWSER:
+        type: choice
+        description: Browser to run tests in
+        required: true
+        options:
+          - chromium
+          - firefox
+          - webkit
+        default: chromium
+      TEST_TAG:
+        type: string
+        description: Cucumber tag expression of the test/suite to run, e.g. "@TST-1" or "@Checkout" (empty = all tests)
+        required: false
+        default: ""
+      PARALLEL:
+        type: boolean
+        description: Parallel test execution
+        required: true
+        default: true
+      THREADS:
+        type: choice
+        description: Number of threads (applies to parallel execution only)
+        required: true
+        options:
+          - "1"
+          - "2"
+          - "3"
+          - "4"
+        default: "2"
+
+permissions:
+  contents: read
+
+jobs:
+  playwright:
+    name: Playwright Tests
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    # Playwright image version must match the Playwright dependency version in build.gradle
+    container:
+      image: mcr.microsoft.com/playwright/java:v1.62.0-noble
+
+    steps:
+      - name: Get code
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Get Java
+        uses: actions/setup-java@v5.5.0
+        with:
+          distribution: 'corretto'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6.2.0
+
+      - name: Run tests
+        shell: bash
+        env:
+          HOME: /root
+          BROWSER: ${{ inputs.BROWSER }}
+          TEST_TAG: ${{ inputs.TEST_TAG }}
+          PARALLEL: ${{ inputs.PARALLEL }}
+          THREADS: ${{ inputs.THREADS }}
+          TEST_USER_LOGIN: ${{ secrets.TEST_USER_LOGIN }}
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+        run: |
+          args=(
+            -Dbrowser="$BROWSER"
+            -Dheadless=true
+            -Dparallel.execution="$PARALLEL"
+            -Dthreads="$THREADS"
+            -Dlogin="$TEST_USER_LOGIN"
+            -Dpassword="$TEST_USER_PASSWORD"
+          )
+          # an empty tag expression is not valid for Cucumber, so pass the filter only when it is set
+          if [ -n "$TEST_TAG" ]; then
+            args+=(-Dcucumber.filter.tags="$TEST_TAG")
+          fi
+          ./gradlew clean test --console=plain "${args[@]}"
+
+      - name: Add env to Allure report
+        if: success() || failure()
+        shell: bash
+        env:
+          BROWSER: ${{ inputs.BROWSER }}
+          TEST_TAG: ${{ inputs.TEST_TAG }}
+          PARALLEL: ${{ inputs.PARALLEL }}
+          THREADS: ${{ inputs.THREADS }}
+        run: |
+          mkdir -p ./build/allure-results
+          {
+            echo "BRANCH=${{ github.ref_name }}"
+            echo "BROWSER=$BROWSER"
+            echo "TEST_TAG=${TEST_TAG:-All tests}"
+            echo "PARALLEL=$PARALLEL"
+            echo "THREADS=$THREADS"
+          } >> ./build/allure-results/environment.properties
+
+      - name: Upload Allure results
+        if: success() || failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: allure-results
+          path: ./build/allure-results
+          retention-days: 3
+
+
+  publish_report:
+    name: Publish Allure Report to GitHub Pages
+    if: always() && needs.playwright.result != 'cancelled'
+    needs: [ playwright ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # serialize pushes to the gh-pages branch between concurrent runs
+    concurrency:
+      group: gh-pages
+      cancel-in-progress: false
+
+    steps:
+      - name: Download Allure results
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: allure-results
+          path: ./allure-results
+
+      - name: Publish test results summary
+        shell: bash
+        run: |
+          count() { jq -s "map(select(.status == \"$1\")) | length" ./allure-results/*-result.json 2>/dev/null || echo 0; }
+          total=$(ls ./allure-results/*-result.json 2>/dev/null | wc -l | tr -d ' ')
+          {
+            echo "## Test Results"
+            echo "| | |"
+            echo "|---|---|"
+            echo "| 📋 Total | $total |"
+            echo "| ✅ Passed | $(count passed) |"
+            echo "| ❌ Failed | $(count failed) |"
+            echo "| 🔨 Broken | $(count broken) |"
+            echo "| ⏭️ Skipped | $(count skipped) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Get Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Generate Allure report
+        # Allure version must match the one in build.gradle
+        run: npx --yes allure@3.4.1 generate ./allure-results --output ./allure-report
+
+      - name: Deploy report to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4.0.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./allure-report
+          # every run gets its own folder, previous reports are kept
+          destination_dir: ${{ github.run_number }}
+          keep_files: true
+
+      - name: Post report link
+        shell: bash
+        env:
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          REPORT_URL="https://${OWNER,,}.github.io/${REPO}/${{ github.run_number }}/"
+          echo "::notice title=Allure report::$REPORT_URL"
+          {
+            echo ""
+            echo "### 📊 [Allure report]($REPORT_URL)"
+            echo "_GitHub Pages may take a minute to deploy the report._"
+          } >> "$GITHUB_STEP_SUMMARY"
