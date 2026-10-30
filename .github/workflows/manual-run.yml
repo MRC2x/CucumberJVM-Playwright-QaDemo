@@ -160,7 +160,7 @@ jobs:
         if: always()
         run: |
           npm install -g allure
-          allure generate build/allure-results -o allure-report
+          allure generate ./allure-results -o ./allure-report
 
       - name: Deploy report to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4.1.0
