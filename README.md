@@ -96,7 +96,7 @@ Scenarios tagged `@Ignore`, `@wip` or `@knownbug` are always excluded.
 
 ## Running on CI
 
-Tests run on GitHub Actions via the manually triggered [**Web tests - Manual Execution**](.github/workflows/manual-run.yml) workflow:
+Tests run on GitHub Actions via the manually triggered [**Web tests - Manual Execution**](https://github.com/MRC2x/CucumberJVM-Playwright-QaDemo/actions/workflows/manual-run.yml) workflow:
 **Actions → Web tests - Manual Execution → Run workflow**.
 
 | Input       | Default    | Description                                                         |
