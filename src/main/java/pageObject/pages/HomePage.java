@@ -2,7 +2,6 @@ package pageObject.pages;
 
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
-import lombok.AccessLevel;
 import lombok.Getter;
 import pageObject.components.NavigationBar;
 import pageObject.components.ProductCard;
@@ -10,7 +9,6 @@ import pageObject.components.ProductCard;
 
 @Getter
 public class HomePage {
-    @Getter(AccessLevel.NONE)
     private final Page page;
     private final NavigationBar navigationBar;
     private final Locator browseProductsButton;

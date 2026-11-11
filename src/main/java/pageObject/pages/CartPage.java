@@ -2,15 +2,11 @@ package pageObject.pages;
 
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
-import lombok.AccessLevel;
 import lombok.Getter;
-
-import java.util.List;
 
 
 @Getter
 public class CartPage {
-    @Getter(AccessLevel.NONE)
     private final Page page;
     private final Locator root;
     private final Locator clearCartButton;

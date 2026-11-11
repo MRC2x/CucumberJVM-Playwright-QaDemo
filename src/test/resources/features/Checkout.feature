@@ -1,9 +1,9 @@
 @Checkout
-Feature: : Checkout
+Feature: Checkout
 
-  @tmsLink=TST-1
-  @TST-1
-  Scenario: TST 1: 'Proceed to checkout' button click requires guest user to signed in
+  @tmsLink=CHECKOUT-1
+  @CHECKOUT-1
+  Scenario: CHECKOUT-1: 'Proceed to checkout' button click requires guest user to signed in
     Given a signed-out user on the "/" page
     When user clicks on "Browse Products" button on the Home page
     Then user is on the "/catalog" page
@@ -16,9 +16,9 @@ Feature: : Checkout
     Then user is on the "/login" page
 
 
-  @tmsLink=TST-2
-  @TST-2
-  Scenario: TST 2: Signed-in user can get to 'Checkout' page
+  @tmsLink=CHECKOUT-2
+  @CHECKOUT-2
+  Scenario: CHECKOUT-2: Signed-in user can get to 'Checkout' page
     Given a signed-in user on the "/" page
     When user clicks on "Browse Products" button on the Home page
     Then user is on the "/catalog" page

@@ -2,12 +2,13 @@ package steps;
 
 import com.microsoft.playwright.Locator;
 import infrastructure.testContext.TestContext;
-import io.cucumber.java.PendingException;
+import io.cucumber.java.en.And;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 import lombok.RequiredArgsConstructor;
 import pageObject.pages.CartPage;
 
+import java.util.List;
 import java.util.regex.Pattern;
 
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
@@ -39,4 +40,26 @@ public class CartSteps {
         button.click();
     }
 
+    @And("added items are present in the cart")
+    public void addedItemsArePresentInTheCart() {
+        List<String> selectedProductNames = testContext.getSelectedProductNames();
+
+        verify("Cart should contain %d items".formatted(selectedProductNames.size()),
+                () -> assertThat(cartPage.getCartItems()).hasCount(selectedProductNames.size())
+        );
+
+        selectedProductNames.forEach(productName ->
+                verify("Cart should contain the selected product '%s'".formatted(productName),
+                        () -> assertThat(cartPage.getCartItems()
+                                .filter(new Locator.FilterOptions().setHasText(productName))).hasCount(1)
+                )
+        );
+    }
+
+    @And("the cart is empty")
+    public void theCartIsEmpty() {
+        verify("Cart should be empty",
+                () -> assertThat(cartPage.getCartItems()).hasCount(0)
+        );
+    }
 }

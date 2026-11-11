@@ -5,10 +5,6 @@ import com.microsoft.playwright.Page;
 import com.microsoft.playwright.options.AriaRole;
 import lombok.Getter;
 
-/**
- * Product card in the catalog grid.
- * Test ids are suffixed with the product id (e.g. {@code product-name-3}), so child elements are matched by prefix
- */
 @Getter
 public class ProductCard {
     private final Locator root;
@@ -20,6 +16,7 @@ public class ProductCard {
     private final Locator description;
     private final Locator price;
     private final Locator addToCartButton;
+    private final Locator removeFromCartButton;
 
     public ProductCard(Locator root) {
         this.root = root;
@@ -31,6 +28,7 @@ public class ProductCard {
         this.description = root.locator("[data-testid^='product-description-']");
         this.price = root.locator("[data-testid^='product-price-']");
         this.addToCartButton = root.locator("[data-testid^='product-add-to-cart-']");
+        this.removeFromCartButton = root.locator("[data-testid^='product-remove-from-cart-']");
     }
 
     /**

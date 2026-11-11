@@ -2,13 +2,11 @@ package pageObject.pages;
 
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
-import lombok.AccessLevel;
 import lombok.Getter;
 
 
 @Getter
 public class ProductPage {
-    @Getter(AccessLevel.NONE)
     private final Page page;
     private final Locator root;
     private final Locator backToCatalogLink;
